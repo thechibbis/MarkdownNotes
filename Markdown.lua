@@ -116,10 +116,11 @@ local function parse_inline(text)
                 position = position + 1
             end
         elseif current == "[" then
+            local precededByImageMarker = string.sub(text, position - 1, position - 1) == "!"
             local labelEnd = string.find(text, "]", position + 1, true)
             local urlStart
             local urlEnd
-            if labelEnd and string.sub(text, labelEnd + 1, labelEnd + 1) == "(" then
+            if not precededByImageMarker and labelEnd and labelEnd > position + 1 and trim(string.sub(text, position + 1, labelEnd - 1)) ~= "" and string.sub(text, labelEnd + 1, labelEnd + 1) == "(" then
                 urlStart = labelEnd + 2
                 urlEnd = string.find(text, ")", urlStart, true)
             end
@@ -181,19 +182,29 @@ local function parse_heading(line)
 end
 
 local function parse_task(line)
-    local leading, marker, checkedMarker, text = string.match(
+    local leading, checkedMarker, text = string.match(
         line,
-        "^(%s*)([-*])%s*%[([ xX])%]%s*(.-)%s*$"
+        "^(%s*)[-*]%s+%[([ xX])%]%s+(.+)$"
     )
     if not leading then
+        return nil
+    end
+
+    text = trim(text)
+    if text == "" then
         return nil
     end
 
     return {
         indent = #leading,
         checkedMarker = checkedMarker ~= " ",
-        text = trim(text),
+        text = text,
     }
+end
+
+local function is_malformed_task(line)
+    local leading = string.match(line, "^(%s*)[-*]%s*%[[ xX]%](.*)$")
+    return leading ~= nil
 end
 
 local function parse_bullet(line)
@@ -318,6 +329,8 @@ function Markdown.Parse(noteId, source, checkedTasks)
                         checked = checked,
                         segments = parse_inline(task.text),
                     }
+                elseif is_malformed_task(line) then
+                    paragraphLines[#paragraphLines + 1] = line
                 else
                     local bullet = parse_bullet(line)
                     if bullet then
