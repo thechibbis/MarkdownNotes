@@ -22,12 +22,17 @@ return function(addon, Test)
             overlay = {},
             store = {},
         }
-        addon.Commands.Register(runtime)
-        Test.equal("slash trigger", _G.SLASH_MARKDOWNNOTES1, "/mn")
-        Test.truthy("slash handler", type(_G.SlashCmdList.MARKDOWNNOTES) == "function")
+        local ok, err = pcall(function()
+            addon.Commands.Register(runtime)
+            Test.equal("slash trigger", _G.SLASH_MARKDOWNNOTES1, "/mn")
+            Test.truthy("slash handler", type(_G.SlashCmdList.MARKDOWNNOTES) == "function")
+        end)
         _G.SlashCmdList = previousSlashCmdList
         _G.SLASH_MARKDOWNNOTES1 = previousSlash
         _G.print = previousPrint
+        if not ok then
+            error(err, 0)
+        end
     end)
 
     local function new_runtime()
@@ -113,6 +118,16 @@ return function(addon, Test)
         with_handler(function(handler, _, events)
             handler("pin raid prep")
             Test.equal("pin event", events[1], "pin:note-1")
+        end)
+    end)
+
+    Test.run("Commands rejects non-exact prefix and substring titles", function()
+        with_handler(function(handler, _, events, messages)
+            handler("pin Raid")
+            handler("pin Prep")
+            Test.equal("no non-exact UI events", #events, 0)
+            Test.equal("prefix message", messages[1], "MarkdownNotes: no note matched that title")
+            Test.equal("substring message", messages[2], "MarkdownNotes: no note matched that title")
         end)
     end)
 
