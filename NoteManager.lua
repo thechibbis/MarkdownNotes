@@ -374,7 +374,7 @@ function NoteManager:ConfirmDelete(noteId)
         end
         self:UpdateActionStates()
         self:UpdateRowSelection()
-        addon:RefreshAll()
+        addon:RefreshNote(noteId)
     end
 end
 
