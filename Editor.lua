@@ -12,6 +12,9 @@ local ACTION_HEIGHT = 24
 local SOURCE_WIDTH = 330
 local PREVIEW_WIDTH = 330
 local CONTENT_HEIGHT = 370
+local SOURCE_LINE_HEIGHT = 14
+local SOURCE_TEXT_INSET = 4
+local SOURCE_MIN_HEIGHT = CONTENT_HEIGHT - 12
 local SOURCE_FONT = _G.ChatFontNormal or _G.GameFontHighlight
 
 local BACKDROP = {
@@ -43,6 +46,18 @@ local function trim(value)
     value = string.gsub(value, "^%s+", "")
     value = string.gsub(value, "%s+$", "")
     return value
+end
+
+local function copy_checked_tasks(checkedTasks)
+    local copy = {}
+    if type(checkedTasks) == "table" then
+        for taskKey, checked in pairs(checkedTasks) do
+            if type(taskKey) == "string" and checked == true then
+                copy[taskKey] = true
+            end
+        end
+    end
+    return copy
 end
 
 local function create_button(parent, text, width)
@@ -130,14 +145,14 @@ local function create_frame(editor)
     local source = CreateFrame("EditBox", nil, sourceScroll)
     source:SetPoint("TOPLEFT", sourceScroll, "TOPLEFT", 6, -6)
     source:SetWidth(SOURCE_WIDTH - 24)
-    source:SetHeight(CONTENT_HEIGHT - 12)
+    source:SetHeight(SOURCE_MIN_HEIGHT)
     source:SetMultiLine(true)
     source:SetAutoFocus(false)
     if source.SetFontObject and SOURCE_FONT then
         source:SetFontObject(SOURCE_FONT)
     end
     if source.SetTextInsets then
-        source:SetTextInsets(4, 4, 4, 4)
+        source:SetTextInsets(SOURCE_TEXT_INSET, SOURCE_TEXT_INSET, SOURCE_TEXT_INSET, SOURCE_TEXT_INSET)
     end
     if source.SetJustifyH then
         source:SetJustifyH("LEFT")
@@ -202,6 +217,24 @@ function Editor:ClearValidation()
     end
 end
 
+function Editor:UpdateSourceHeight()
+    if not self.source or not self.source.GetNumLines or not self.source.SetHeight then
+        return
+    end
+
+    local lineCount = self.source:GetNumLines() or 0
+    if lineCount < 1 then
+        lineCount = 1
+    end
+
+    local contentHeight = (lineCount * SOURCE_LINE_HEIGHT) + (SOURCE_TEXT_INSET * 2)
+    self.source:SetHeight(math.max(SOURCE_MIN_HEIGHT, contentHeight))
+
+    if self.sourceScroll and self.sourceScroll.UpdateScrollChildRect then
+        self.sourceScroll:UpdateScrollChildRect()
+    end
+end
+
 function Editor:RefreshPreview()
     local addon = self.addon
     if not addon or not addon.Markdown or not addon.Markdown.Parse or not addon.renderer or not addon.renderer.Render then
@@ -211,16 +244,8 @@ function Editor:RefreshPreview()
         return
     end
 
-    local noteId = "draft"
-    local checkedTasks = {}
-    if self.draftNoteId and addon.store and addon.store.GetNote then
-        noteId = self.draftNoteId
-        local note = addon.store:GetNote(self.draftNoteId)
-        if note then
-            noteId = note.id or self.draftNoteId
-            checkedTasks = note.checkedTasks or {}
-        end
-    end
+    local noteId = self.draftNoteId or "draft"
+    local checkedTasks = self.previewCheckedTasks or {}
 
     local source = ""
     if self.source and self.source.GetText then
@@ -229,11 +254,9 @@ function Editor:RefreshPreview()
 
     local rows = addon.Markdown.Parse(noteId, source, checkedTasks)
     addon.renderer:Render(self.previewContent, rows, function(taskKey, checked)
-        if self.draftNoteId and addon.store and addon.store.SetTaskChecked then
-            if addon.store:SetTaskChecked(self.draftNoteId, taskKey, checked) and addon.RefreshNote then
-                addon:RefreshNote(self.draftNoteId)
-            end
-        end
+        self.previewCheckedTasks = self.previewCheckedTasks or {}
+        self.previewCheckedTasks[taskKey] = checked == true
+        self:RefreshPreview()
     end)
 
     if self.previewScroll and self.previewScroll.UpdateScrollChildRect then
@@ -241,14 +264,32 @@ function Editor:RefreshPreview()
     end
 end
 
+function Editor:SyncPreviewCheckedTasks(noteId, previewNoteId)
+    local addon = self.addon
+    if not addon or not addon.store or not addon.store.SetTaskChecked then
+        return
+    end
+
+    previewNoteId = previewNoteId or noteId
+    local previewPrefix = tostring(previewNoteId) .. ":"
+    for taskKey, checked in pairs(self.previewCheckedTasks or {}) do
+        local storageTaskKey = taskKey
+        if string.sub(taskKey, 1, #previewPrefix) == previewPrefix then
+            storageTaskKey = tostring(noteId) .. ":" .. string.sub(taskKey, #previewPrefix + 1)
+        end
+        addon.store:SetTaskChecked(noteId, storageTaskKey, checked == true)
+    end
+end
 function Editor:OpenNew()
     self.draftNoteId = nil
+    self.previewCheckedTasks = {}
     self:ClearValidation()
 
     self.suppressTextChanged = true
     self.title:SetText("New note")
     self.source:SetText("")
     self.suppressTextChanged = false
+    self:UpdateSourceHeight()
 
     self.frame:Show()
     self.previewScroll:Show()
@@ -267,12 +308,14 @@ function Editor:Open(noteId)
     end
 
     self.draftNoteId = note.id or noteId
+    self.previewCheckedTasks = copy_checked_tasks(note.checkedTasks)
     self:ClearValidation()
 
     self.suppressTextChanged = true
     self.title:SetText(note.title or "")
     self.source:SetText(note.markdown or "")
     self.suppressTextChanged = false
+    self:UpdateSourceHeight()
 
     self.frame:Show()
     self.previewScroll:Show()
@@ -283,6 +326,7 @@ function Editor:Save()
     local title = trim(self.title:GetText())
     local source = self.source:GetText() or ""
 
+    local previewNoteId = self.draftNoteId or "draft"
     if title == "" then
         self.validation:SetText("Title is required.")
         self.validation:Show()
@@ -298,6 +342,7 @@ function Editor:Save()
     end
 
     if note then
+        self:SyncPreviewCheckedTasks(note.id, previewNoteId)
         self:Close()
         if addon.manager and addon.manager.Select then
             addon.manager:Select(note.id)
@@ -331,6 +376,7 @@ function Editor.Create(addon)
     local editor = setmetatable({
         addon = addon,
         draftNoteId = nil,
+        previewCheckedTasks = {},
         suppressTextChanged = false,
     }, { __index = Editor })
 
@@ -343,12 +389,7 @@ function Editor.Create(addon)
         end
     end)
     editor.source:SetScript("OnTextChanged", function()
-        if editor.source.GetStringHeight and editor.source.SetHeight then
-            editor.source:SetHeight(math.max(CONTENT_HEIGHT - 12, editor.source:GetStringHeight() + 8))
-        end
-        if editor.sourceScroll and editor.sourceScroll.UpdateScrollChildRect then
-            editor.sourceScroll:UpdateScrollChildRect()
-        end
+        editor:UpdateSourceHeight()
         if not editor.suppressTextChanged then
             editor:RefreshPreview()
         end
