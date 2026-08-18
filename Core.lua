@@ -23,7 +23,7 @@ end)
 function addon:RefreshNote(noteId)
     if self.manager then
         self.manager:RefreshList()
-        self.manager:RefreshPreview(noteId)
+        self.manager:RefreshPreview()
     end
     if self.overlay then
         self.overlay:Refresh(noteId)

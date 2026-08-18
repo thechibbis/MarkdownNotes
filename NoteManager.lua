@@ -3,7 +3,7 @@ local addonName, addon = ...
 addon = addon or {}
 
 local NoteManager = {}
-
+local Renderer = addon.Renderer
 local FRAME_NAME = "MarkdownNotesManagerFrame"
 local FRAME_WIDTH = 640
 local FRAME_HEIGHT = 420
@@ -241,7 +241,7 @@ function NoteManager:RefreshList()
     for index, note in ipairs(notes) do
         local row = ensure_list_row(self, index)
         row.noteId = note.id
-        row:SetText(note.title or "")
+        row:SetText(Renderer.EscapeText(note.title or ""))
         row:ClearAllPoints()
         row:SetPoint("TOPLEFT", self.listContent, "TOPLEFT", 0, -((index - 1) * ROW_HEIGHT))
         row:SetSize(LIST_WIDTH, ROW_HEIGHT)
@@ -357,7 +357,7 @@ function NoteManager:RequestDelete()
     end
 
     if StaticPopup_Show then
-        StaticPopup_Show(DELETE_DIALOG_NAME, note.title or "", nil, noteId)
+        StaticPopup_Show(DELETE_DIALOG_NAME, Renderer.EscapeText(note.title or ""), nil, noteId)
     end
 end
 

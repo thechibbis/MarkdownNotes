@@ -558,7 +558,7 @@ function Overlay:Refresh(noteId)
     end
 
     if frame.title and frame.title.SetText then
-        frame.title:SetText(note.title or noteId)
+        frame.title:SetText(addon.Renderer.EscapeText(note.title or noteId))
     end
     update_body_width(frame)
 
