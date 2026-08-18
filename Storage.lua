@@ -322,7 +322,7 @@ function Storage.Create(database, clockFunction)
 
         local note = db.notes.byId[noteId]
         if not note then
-            return nil, nil
+            return nil, "missing-note"
         end
 
         note.title = title
