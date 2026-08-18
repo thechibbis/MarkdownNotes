@@ -1,0 +1,15 @@
+## Interface: 120100
+## Title: MarkdownNotes
+## Notes: Create and display Markdown notes as in-game overlays.
+## Version: 0.1.0
+## Author: MarkdownNotes
+## SavedVariables: MarkdownNotesDB
+
+Core.lua
+Storage.lua
+Markdown.lua
+Renderer.lua
+NoteManager.lua
+Editor.lua
+Overlay.lua
+Commands.lua
